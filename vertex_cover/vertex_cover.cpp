@@ -18,6 +18,7 @@ int main(int argc, char **argv) {
     }
     string fileName(argv[1]);
     ifstream ifs(fileName);
+    string prefix = fileName.substr(0, fileName.find_last_of('.'));
     if (ifs.fail()) {
         cout << "Cannot open " << fileName << endl;
     }
@@ -36,18 +37,18 @@ int main(int argc, char **argv) {
         }
     }
 
-    // init Gurobi env & model
+    // 0. init Gurobi env & model
     GRBEnv env = GRBEnv();
-    env.set(GRB_IntParam_LogToConsole, 0);  // make the console silent
+    // env.set(GRB_IntParam_LogToConsole, 0);  // make the console silent
     GRBModel model = GRBModel(env);
 
-    // variables
+    // 1. variables
     vector<GRBVar> vertexVars(numVertexes);
     for (int i = 0; i < numVertexes; ++i) {
         vertexVars[i] = model.addVar(0.0, 1.0, 1.0, GRB_BINARY, "vertex" + to_string(i));
     }
 
-    // constraints
+    // 2. constraints
     for (int i = 0; i < numVertexes; ++i) {
         for (int j : adjLists[i]) {
             if (i < j) {
@@ -56,6 +57,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    // 3. solve
+    // model.write(prefix + ".lp");
     model.optimize();
     cout << "Min vertex cover is " << model.getObjective().getValue() << endl;
     cout << "Selected vertexes are: ";
@@ -67,9 +70,8 @@ int main(int argc, char **argv) {
     }
     cout << endl;
 
-    // debug file
-    model.write("vertex_cover.lp");
-    model.write("vertex_cover.sol");
+    // 4. check
+    // model.write(prefix + ".sol");
 
     chrono::duration<double> duration = chrono::system_clock::now() - start;
     cout << "The program takes " << duration.count() << " seconds." << endl;

@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     auto start = chrono::system_clock::now();
 
     // read
-    if (argc != 2) {
+    if (argc < 2) {
         cout << "Please specify the input file name." << endl;
         return 1;
     }
@@ -20,6 +20,10 @@ int main(int argc, char **argv) {
     ifstream ifs(fileName);
     if (ifs.fail()) {
         cout << "Cannot open " << fileName << endl;
+    }
+    bool rotate = true;
+    if (argc > 2 && string(argv[2]) == "--no_rotate") {
+        rotate = false;
     }
     string prefix = fileName.substr(0, fileName.find_last_of('.'));
     string buf;
@@ -46,11 +50,15 @@ int main(int argc, char **argv) {
     GRBModel model = GRBModel(env);
 
     // 1. variables
-    vector<GRBVar> xVars(numBlocks);    // lower x
-    vector<GRBVar> yVars(numBlocks);    // lower y
+    vector<GRBVar> xVars(numBlocks);        // lower x
+    vector<GRBVar> yVars(numBlocks);        // lower y
+    vector<GRBVar> rotateVars(numBlocks);   // rotate
     for (int i = 0; i < numBlocks; ++i) {
         xVars[i] = model.addVar(0.0, chipWidth - widths[i], 0.0, GRB_CONTINUOUS, "x" + to_string(i));
         yVars[i] = model.addVar(0.0, chipHeightUB, 0.0, GRB_CONTINUOUS, "y" + to_string(i));
+        if (rotate) {
+            rotateVars[i] = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "r" + to_string(i));
+        }
     }
     GRBVar chipHeightVar = model.addVar(0.0, chipHeightUB, 1.0, GRB_CONTINUOUS, "H");
 
@@ -59,7 +67,20 @@ int main(int argc, char **argv) {
     for (int i = 0; i < numBlocks; ++i) {
         model.addConstr(yVars[i] + heights[i] <= chipHeightVar, "y" + to_string(i) + "_H");
     }
-    // 2.2 no overlap
+    // 2.2 relate widths/heights with widthExprs/heightExprs
+    vector<GRBLinExpr> widthExprs(numBlocks);
+    vector<GRBLinExpr> heightExprs(numBlocks);
+    for (int i = 0; i < numBlocks; ++i) {
+        if (rotate) {
+            widthExprs[i] = widths[i] + (heights[i] - widths[i]) * rotateVars[i];
+            heightExprs[i] = heights[i] + (widths[i] - heights[i]) * rotateVars[i];
+        }
+        else {
+            widthExprs[i] = widths[i];
+            heightExprs[i] = heights[i];
+        }
+    }
+    // 2.3 no overlap
     for (int i = 0; i < numBlocks; ++i) {
         for (int j = i + 1; j < numBlocks; ++j) {
             string pairStr = to_string(i) + "_" + to_string(j);
@@ -68,16 +89,16 @@ int main(int argc, char **argv) {
             GRBVar xLowHighVars[2];
             xLowHighVars[0] = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "xLow" + pairStr);
             xLowHighVars[1] = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "xHigh" + pairStr);
-            model.addGenConstrIndicator(xLowHighVars[0], 1.0, xVars[i] + widths[i] <= xVars[j]);
-            model.addGenConstrIndicator(xLowHighVars[1], 1.0, xVars[j] + widths[j] <= xVars[i]);
+            model.addGenConstrIndicator(xLowHighVars[0], 1.0, xVars[i] + widthExprs[i] <= xVars[j]);
+            model.addGenConstrIndicator(xLowHighVars[1], 1.0, xVars[j] + widthExprs[j] <= xVars[i]);
             model.addGenConstrOr(xNoOvlp, xLowHighVars, 2);
             // y
             GRBVar yNoOvlp = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "yNoOvlp" + pairStr);
             GRBVar yLowHighVars[2];
             yLowHighVars[0] = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "yLow" + pairStr);
             yLowHighVars[1] = model.addVar(0.0, 1.0, 0.0, GRB_BINARY, "yHigh" + pairStr);
-            model.addGenConstrIndicator(yLowHighVars[0], 1.0, yVars[i] + heights[i] <= yVars[j]);
-            model.addGenConstrIndicator(yLowHighVars[1], 1.0, yVars[j] + heights[j] <= yVars[i]);
+            model.addGenConstrIndicator(yLowHighVars[0], 1.0, yVars[i] + heightExprs[i] <= yVars[j]);
+            model.addGenConstrIndicator(yLowHighVars[1], 1.0, yVars[j] + heightExprs[j] <= yVars[i]);
             model.addGenConstrOr(yNoOvlp, yLowHighVars, 2);
             // together
             model.addConstr(xNoOvlp + yNoOvlp >= 1, "noOvlp" + pairStr);
@@ -93,8 +114,12 @@ int main(int argc, char **argv) {
     for (int i = 0; i < numBlocks; ++i) {
         double x = xVars[i].get(GRB_DoubleAttr_X);
         double y = yVars[i].get(GRB_DoubleAttr_X);
-        cout << i << " : " << x << " " << y << " " << widths[i] << " " << heights[i] << endl;
-        ofs << i << " : " << x << " " << y << endl;
+        ofs << i << " : " << x << " " << y;
+        if (rotate) {
+            int r = rotateVars[i].get(GRB_DoubleAttr_X);
+            ofs << " " << r;
+        }
+        ofs << endl;
     }
     cout << endl;
 

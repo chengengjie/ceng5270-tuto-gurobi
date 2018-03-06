@@ -39,16 +39,15 @@ int main(int argc, char **argv) {
 
     // 0. init Gurobi env & model
     GRBEnv env = GRBEnv();
-    // env.set(GRB_IntParam_LogToConsole, 0);  // make the console silent
     GRBModel model = GRBModel(env);
 
-    // 1. variables
+    // 1. add variables
     vector<GRBVar> vertexVars(numVertexes);
     for (int i = 0; i < numVertexes; ++i) {
         vertexVars[i] = model.addVar(0.0, 1.0, 1.0, GRB_BINARY, "vertex" + to_string(i));
     }
 
-    // 2. constraints
+    // 2. add constraints
     for (int i = 0; i < numVertexes; ++i) {
         for (int j : adjLists[i]) {
             if (i < j) {
@@ -57,7 +56,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // 3. solve
+    // 3. solve & retrieve solutions
     // model.write(prefix + ".lp");
     model.optimize();
     cout << "Min vertex cover is " << model.getObjective().getValue() << endl;

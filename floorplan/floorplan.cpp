@@ -13,13 +13,14 @@ int main(int argc, char **argv) {
 
     // read
     if (argc < 2) {
-        cout << "Please specify the input file name." << endl;
+        cout << "Usage: ./floorplan <input_problem_file>" << endl;
         return 1;
     }
     string fileName(argv[1]);
     ifstream ifs(fileName);
     if (ifs.fail()) {
         cout << "Cannot open " << fileName << endl;
+        return 1;
     }
     bool rotate = true;
     if (argc > 2 && string(argv[2]) == "--no_rotate") {
@@ -35,18 +36,15 @@ int main(int argc, char **argv) {
     vector<double> heights(numBlocks);
     double chipHeightUB;
     for (int i = 0; i < numBlocks; ++i) {
-        double width, height;
         getline(ifs, buf);
         istringstream iss(buf);
-        iss >> buf >> buf >> width >> height;  // i : yyy
-        widths[i] = width;
-        heights[i] = height;
-        chipHeightUB += height;
+        iss >> buf >> buf >> widths[i] >> heights[i];  // i : yyy
+        chipHeightUB += heights[i];
     }
 
     // 0. init Gurobi env & model
     GRBEnv env = GRBEnv();
-    // env.set(GRB_IntParam_LogToConsole, 0);  // make the console silent
+    env.set(GRB_IntParam_LogToConsole, 0);  // make the console silent
     GRBModel model = GRBModel(env);
 
     // 1. variables
@@ -113,12 +111,12 @@ int main(int argc, char **argv) {
     // model.write(prefix + ".lp");
     model.optimize();
     cout << "Min chip height is " << model.getObjective().getValue() << endl;
-    cout << "Block locations are: " << endl;
+    // cout << "Block locations are: " << endl;
     ofstream ofs(prefix + "_solution.txt");
     for (int i = 0; i < numBlocks; ++i) {
         double x = xVars[i].get(GRB_DoubleAttr_X);
         double y = yVars[i].get(GRB_DoubleAttr_X);
-        cout << i << " : " << x << " " << y << " " << widthExprs[i].getValue() << " " << heightExprs[i].getValue() << endl;
+        // cout << i << " : " << x << " " << y << " " << widthExprs[i].getValue() << " " << heightExprs[i].getValue() << endl;
         ofs << i << " : " << x << " " << y;
         if (rotate) {
             int r = rotateVars[i].get(GRB_DoubleAttr_X);
@@ -126,7 +124,7 @@ int main(int argc, char **argv) {
         }
         ofs << endl;
     }
-    cout << endl;
+    // cout << endl;
 
     // 4. debug
     // model.write(prefix + ".sol");

@@ -1,6 +1,6 @@
 # Tutorial of Gurobi
 
-For CENG5270@CUHK (2018 Spring)
+For CENG5270@CUHK (EDA for Physical Design of Digital Systems, 2018 Spring)
 
 Gengjie Chen
 
